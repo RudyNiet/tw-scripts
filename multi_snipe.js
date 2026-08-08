@@ -1,14 +1,14 @@
 /*
  * Script Name: Multi-Target Village Snipe
- * Version: v3.0.0
- * Author: RedAlert & Adapted for Multi-Targeting
- * Description: Calculate and plan snipes for multiple incoming targets at once.
+ * Version: v1.0.0
+ * Author: Rudyniet
+ * Description: Select multiple commands on village screen to compute & export multi-target snipes.
  */
 
 var scriptData = {
     prefix: 'multiVillageSnipe',
     name: 'Multi-Target Village Snipe',
-    version: 'v3.0.0',
+    version: 'v3.1.0',
     author: 'RedAlert & Community',
     authorUrl: 'https://twscripts.dev/',
     helpLink: 'https://forum.tribalwars.net/',
@@ -41,7 +41,7 @@ async function initMultiSnipe(groupId) {
     renderUI(content);
 
     // Event Handlers
-    jQuery('#addTargetBtn').on('click', addTargetRow);
+    jQuery('#addTargetBtn').on('click', function() { addTargetRow(); });
     jQuery('#calculateLaunchTimes').on('click', calculateLaunchTimes);
     jQuery('#exportConfig').on('click', exportConfig);
     jQuery('#importConfig').on('click', importConfig);
@@ -49,7 +49,10 @@ async function initMultiSnipe(groupId) {
     jQuery('#resetScriptBtn').on('click', resetScriptHandler);
     jQuery('#raGroupsFilter').on('change', filterVillagesByChosenGroup);
 
-    // Load saved targets or initialize with default current village
+    // Dynamic selection handler from command rows on page
+    bindCommandSelection();
+
+    // Load saved targets or load initial target
     loadSavedTargets();
 }
 
@@ -75,7 +78,7 @@ function prepareContent(groups, unitsTable) {
         </div>
 
         <div class="ra-mb15">
-            <label>${tt('Targets List (Destination | Landing Time dd/mm/yyyy HH:mm:ss)')}</label>
+            <label>${tt('Targets List (Select commands below or add manually)')}</label>
             <table class="ra-table vis" width="100%" id="raTargetsTable">
                 <thead>
                     <tr>
@@ -85,11 +88,11 @@ function prepareContent(groups, unitsTable) {
                     </tr>
                 </thead>
                 <tbody>
-                    <!-- Rows dynamically generated -->
+                    <!-- Target rows dynamically appended -->
                 </tbody>
             </table>
             <div style="margin-top: 5px;">
-                <a href="javascript:void(0);" id="addTargetBtn" class="btn">${tt('Add Target')}</a>
+                <a href="javascript:void(0);" id="addTargetBtn" class="btn">${tt('Add Target Row')}</a>
             </div>
         </div>
 
@@ -101,8 +104,8 @@ function prepareContent(groups, unitsTable) {
         <div class="ra-mb15">
             <a href="javascript:void(0);" id="calculateLaunchTimes" class="btn btn-confirm-yes">${tt('Calculate Launch Times')}</a>
             <a href="javascript:void(0);" id="exportBBCodeBtn" class="btn" data-snipe="">${tt('Export as BB Code')}</a>
-            <a href="javascript:void(0);" id="exportConfig" class="btn">${tt('Export Config')}</a>
-            <a href="javascript:void(0);" id="importConfig" class="btn">${tt('Import Config')}</a>
+            <a href="javascript:void(0);" id="exportConfig" class="btn">${tt('Export List (Share)')}</a>
+            <a href="javascript:void(0);" id="importConfig" class="btn">${tt('Import List')}</a>
             <a href="javascript:void(0);" id="resetScriptBtn" class="btn">${tt('Reset Script')}</a>
         </div>
 
@@ -121,12 +124,13 @@ function renderUI(body) {
         </div>
         <style>
             .ra-single-village-snipe { position: relative; display: block; width: auto; margin: 0 auto 15px; padding: 10px; border: 1px solid #603000; background: #f4e4bc; }
-            .ra-single-village-snipe input[type="text"], .ra-single-village-snipe input[type="number"] { width: 100%; padding: 4px; border: 1px solid #000; }
+            .ra-single-village-snipe input[type="text"], .ra-single-village-snipe input[type="number"] { width: 100%; padding: 4px; border: 1px solid #000; box-sizing: border-box; }
             .ra-grid-top { display: grid; grid-template-columns: 200px 100px 100px; grid-gap: 15px; }
             .ra-table { border-collapse: separate !important; border-spacing: 2px !important; }
             .ra-table th, .ra-table td { padding: 4px; text-align: center; }
             .ra-mb15 { margin-bottom: 15px; }
             .btn-remove-row { color: red; font-weight: bold; cursor: pointer; }
+            .ra-chosen-command td { background-color: #ffe563 !important; }
         </style>
     `;
 
@@ -137,10 +141,25 @@ function renderUI(body) {
     }
 }
 
+// Bind click event on village command tables to automatically add target
+function bindCommandSelection() {
+    jQuery('#commands_outgoings tr.command-row, #commands_incomings tr.command-row').off('click.snipe').on('click.snipe', function () {
+        jQuery(this).toggleClass('ra-chosen-command');
+        const rawTime = jQuery(this).find('td:eq(1)').text().trim();
+        const landingTime = getTimeFromString(rawTime);
+        const destination = getDestinationVillageCoords();
+
+        if (landingTime && destination) {
+            addTargetRow(destination, landingTime);
+            UI.SuccessMessage('Command added to targets!');
+        }
+    });
+}
+
 function addTargetRow(coords = '', landingTime = '') {
-    if (!landingTime) {
-        landingTime = new Date().toLocaleString('en-GB').replace(',', '');
-    }
+    if (!coords) coords = getDestinationVillageCoords();
+    if (!landingTime) landingTime = new Date().toLocaleString('en-GB').replace(',', '');
+
     const rowHtml = `
         <tr class="ra-target-row">
             <td><input type="text" class="ra-target-coords" value="${coords}" placeholder="500|500"></td>
@@ -149,6 +168,14 @@ function addTargetRow(coords = '', landingTime = '') {
         </tr>
     `;
     jQuery('#raTargetsTable tbody').append(rowHtml);
+}
+
+function getDestinationVillageCoords() {
+    let villageText = mobiledevice 
+        ? jQuery('.mobileKeyValue').eq(0).find('div').eq(0).text() 
+        : jQuery('#content_value table table td:eq(2)').text();
+    const match = villageText.match(/\d+\|\d+/);
+    return match ? match[0] : '';
 }
 
 function getTargetsFromUI() {
@@ -191,7 +218,6 @@ function calculateLaunchTimes() {
             chosenUnits.forEach((unit) => {
                 const launchTime = getLaunchTime(unit, landingTimeObj, distance);
                 if (launchTime > serverTime && distance > 0) {
-                    // Check troop availability
                     const villageTroops = troopCounts.find((t) => t.villageId === village.id);
                     if (villageTroops && villageTroops[unit] >= (unit === 'snob' ? 1 : minAmount)) {
                         allRealSnipes.push({
@@ -284,8 +310,8 @@ function exportConfig() {
 function importConfig() {
     const content = `
         <div class="ra-popup-content">
-            <textarea id="importArea" style="width:100%;height:150px;" placeholder="Paste JSON config here..."></textarea>
-            <br/><a href="javascript:void(0);" id="processImportBtn" class="btn">Import</a>
+            <textarea id="importArea" style="width:100%;height:150px;" placeholder="Paste target JSON list here..."></textarea>
+            <br/><a href="javascript:void(0);" id="processImportBtn" class="btn" style="margin-top:5px;">Import List</a>
         </div>
     `;
     Dialog.show('import_dialog', content);
@@ -293,13 +319,17 @@ function importConfig() {
     jQuery('#processImportBtn').on('click', function () {
         try {
             const data = JSON.parse(jQuery('#importArea').val().trim());
-            if (data.targets && Array.isArray(data.targets)) {
+            const targetList = Array.isArray(data) ? data : data.targets;
+
+            if (targetList && Array.isArray(targetList)) {
                 jQuery('#raTargetsTable tbody').empty();
-                data.targets.forEach((t) => addTargetRow(t.destination, t.landingTime));
+                targetList.forEach((t) => addTargetRow(t.destination, t.landingTime));
                 if (data.sigil) jQuery('#raSigil').val(data.sigil);
                 if (data.minAmount) jQuery('#raMinAmount').val(data.minAmount);
-                UI.SuccessMessage('Import successful!');
+                UI.SuccessMessage('Targets imported successfully!');
                 Dialog.close();
+            } else {
+                UI.ErrorMessage('Invalid format!');
             }
         } catch (e) {
             UI.ErrorMessage('Invalid Configuration JSON.');
@@ -317,14 +347,32 @@ function loadSavedTargets() {
     if (savedTargets && savedTargets.length > 0) {
         savedTargets.forEach((t) => addTargetRow(t.destination, t.landingTime));
     } else {
-        // Fallback default
-        let villageCoords = jQuery('#content_value table table td:eq(2)').text().match(/\d+\|\d+/);
-        villageCoords = villageCoords ? villageCoords[0] : '';
-        addTargetRow(villageCoords);
+        addTargetRow(getDestinationVillageCoords());
     }
 }
 
 /* Helpers */
+function getTimeFromString(timeLand) {
+    let serverDate = jQuery('#serverDate').text().split('/');
+    let time = timeLand.match(/\d+:\d+:\d+:\d+/) ?? timeLand.match(/\d+:\d+:\d+/);
+    time = time ? time[0] : '';
+
+    if (timeLand.includes('today') || timeLand.includes('heute')) {
+        return `${serverDate[0]}/${serverDate[1]}/${serverDate[2]} ${time}`;
+    } else if (timeLand.includes('tomorrow') || timeLand.includes('morgen')) {
+        let tomorrow = new Date(serverDate[1] + '/' + serverDate[0] + '/' + serverDate[2]);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        return `${('0' + tomorrow.getDate()).slice(-2)}/${('0' + (tomorrow.getMonth() + 1)).slice(-2)}/${tomorrow.getFullYear()} ${time}`;
+    } else {
+        let on = timeLand.match(/\d+.\d+/);
+        if (on) {
+            let dateParts = on[0].split('.');
+            return `${dateParts[0]}/${dateParts[1]}/${serverDate[2]} ${time}`;
+        }
+    }
+    return `${serverDate[0]}/${serverDate[1]}/${serverDate[2]} ${time}`;
+}
+
 function calculateDistance(from, to) {
     const [x1, y1] = from.split('|');
     const [x2, y2] = to.split('|');
@@ -476,7 +524,7 @@ var xml2json = function ($xml) {
     return data;
 };
 
-function tt(str) { return str; } // Prepared for English texts
+function tt(str) { return str; }
 
 (function () {
     if (!game_data.features.Premium.active) return UI.ErrorMessage('Premium Account required!');
