@@ -1,30 +1,24 @@
 /*
  * Script Name: Multi-Target Village Snipe
  * Version: v1.0.0
- * Author: Rudyniet
- * Description: Select multiple commands on village screen to compute & export multi-target snipes.
+ * Author: RudyNiet
+ * Description: Universal Multi-Target Snipe Calculator with command selector & import/export.
  */
 
 var scriptData = {
-    prefix: 'multiVillageSnipe',
-    name: 'Multi-Target Village Snipe',
-    version: 'v3.1.0',
-    author: 'RedAlert & Community',
-    authorUrl: 'https://twscripts.dev/',
-    helpLink: 'https://forum.tribalwars.net/',
+    prefix: 'rudyMultiSnipe',
+    name: 'Multi-Target Snipe Calculator',
+    version: 'v1.0.0',
+    author: 'RudyNiet'
 };
 
-if (typeof DEBUG !== 'boolean') DEBUG = false;
-if (typeof REMAINING_TIME_ALERT === 'undefined') REMAINING_TIME_ALERT = '0:00:10';
-
-var LS_PREFIX = 'raMultiVillageSnipe';
-var TIME_INTERVAL = 60 * 60 * 1000 * 24 * 1;
+var LS_PREFIX = 'rudyMultiSnipe';
+var TIME_INTERVAL = 60 * 60 * 1000 * 24;
 var GROUP_ID = localStorage.getItem(`${LS_PREFIX}_chosen_group`) ?? 0;
 var LAST_UPDATED_TIME = localStorage.getItem(`${LS_PREFIX}_last_updated`) ?? 0;
 
-var unitInfo,
-    villages = [],
-    troopCounts = [];
+var unitInfo, villages = [], troopCounts = [];
+var selectedCommandsQueue = JSON.parse(localStorage.getItem(`${LS_PREFIX}_targets`)) || [];
 
 if (LAST_UPDATED_TIME !== null && Date.parse(new Date()) < LAST_UPDATED_TIME + TIME_INTERVAL) {
     unitInfo = JSON.parse(localStorage.getItem(`${LS_PREFIX}_unit_info`));
@@ -32,157 +26,234 @@ if (LAST_UPDATED_TIME !== null && Date.parse(new Date()) < LAST_UPDATED_TIME + T
     fetchUnitInfo();
 }
 
-async function initMultiSnipe(groupId) {
-    villages = await fetchAllPlayerVillagesByGroup(groupId);
-    troopCounts = await fetchTroopsForCurrentGroup(groupId);
-    const groups = await fetchVillageGroups();
-    const unitsTable = buildUnitsChoserTable();
-    const content = prepareContent(groups, unitsTable);
-    renderUI(content);
+async function startScript() {
+    villages = await fetchAllPlayerVillagesByGroup(GROUP_ID);
+    troopCounts = await fetchTroopsForCurrentGroup(GROUP_ID);
 
-    // Event Handlers
-    jQuery('#addTargetBtn').on('click', function() { addTargetRow(); });
-    jQuery('#calculateLaunchTimes').on('click', calculateLaunchTimes);
-    jQuery('#exportConfig').on('click', exportConfig);
-    jQuery('#importConfig').on('click', importConfig);
-    jQuery('#exportBBCodeBtn').on('click', exportBBCode);
-    jQuery('#resetScriptBtn').on('click', resetScriptHandler);
-    jQuery('#raGroupsFilter').on('change', filterVillagesByChosenGroup);
+    const isVillageScreen = game_data.screen === 'info_village';
 
-    // Dynamic selection handler from command rows on page
-    bindCommandSelection();
-
-    // Load saved targets or load initial target
-    loadSavedTargets();
-}
-
-function prepareContent(groups, unitsTable) {
-    const groupsFilter = renderGroupsFilter(groups);
-
-    return `
-        <div class="ra-mb15">
-            <div class="ra-grid-top">
-                <div>
-                    <label>${tt('Group')}</label>
-                    ${groupsFilter}
-                </div>
-                <div>
-                    <label>${tt('Sigil (%)')}</label>
-                    <input id="raSigil" type="number" value="0">
-                </div>
-                <div>
-                    <label>${tt('Min. Amount')}</label>
-                    <input id="raMinAmount" type="number" value="50">
-                </div>
-            </div>
-        </div>
-
-        <div class="ra-mb15">
-            <label>${tt('Targets List (Select commands below or add manually)')}</label>
-            <table class="ra-table vis" width="100%" id="raTargetsTable">
-                <thead>
-                    <tr>
-                        <th>${tt('Destination Village')}</th>
-                        <th>${tt('Landing Time')}</th>
-                        <th>${tt('Action')}</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <!-- Target rows dynamically appended -->
-                </tbody>
-            </table>
-            <div style="margin-top: 5px;">
-                <a href="javascript:void(0);" id="addTargetBtn" class="btn">${tt('Add Target Row')}</a>
-            </div>
-        </div>
-
-        <div class="ra-mb15">
-            <label>${tt('Choose Units to Snipe')}</label>
-            ${unitsTable}
-        </div>
-
-        <div class="ra-mb15">
-            <a href="javascript:void(0);" id="calculateLaunchTimes" class="btn btn-confirm-yes">${tt('Calculate Launch Times')}</a>
-            <a href="javascript:void(0);" id="exportBBCodeBtn" class="btn" data-snipe="">${tt('Export as BB Code')}</a>
-            <a href="javascript:void(0);" id="exportConfig" class="btn">${tt('Export List (Share)')}</a>
-            <a href="javascript:void(0);" id="importConfig" class="btn">${tt('Import List')}</a>
-            <a href="javascript:void(0);" id="resetScriptBtn" class="btn">${tt('Reset Script')}</a>
-        </div>
-
-        <div style="display:none;" class="ra-mb15" id="raPossibleCombinations">
-            <label><span id="possibleCombinationsCount">0</span> ${tt('snipe attempts found')}</label>
-            <div id="possibleCombinationsTable"></div>
-        </div>
-    `;
-}
-
-function renderUI(body) {
-    const content = `
-        <div class="ra-single-village-snipe" id="raMultiVillageSnipe">
-            <h2>${scriptData.name}</h2>
-            <div class="ra-single-village-snipe-data">${body}</div>
-        </div>
-        <style>
-            .ra-single-village-snipe { position: relative; display: block; width: auto; margin: 0 auto 15px; padding: 10px; border: 1px solid #603000; background: #f4e4bc; }
-            .ra-single-village-snipe input[type="text"], .ra-single-village-snipe input[type="number"] { width: 100%; padding: 4px; border: 1px solid #000; box-sizing: border-box; }
-            .ra-grid-top { display: grid; grid-template-columns: 200px 100px 100px; grid-gap: 15px; }
-            .ra-table { border-collapse: separate !important; border-spacing: 2px !important; }
-            .ra-table th, .ra-table td { padding: 4px; text-align: center; }
-            .ra-mb15 { margin-bottom: 15px; }
-            .btn-remove-row { color: red; font-weight: bold; cursor: pointer; }
-            .ra-chosen-command td { background-color: #ffe563 !important; }
-        </style>
-    `;
-
-    if (jQuery('#raMultiVillageSnipe').length < 1) {
-        jQuery('#contentContainer').prepend(content);
-    } else {
-        jQuery('.ra-single-village-snipe-data').html(body);
+    if (isVillageScreen) {
+        enableCommandSelector();
     }
+
+    // Always create or open modal UI
+    openMainInterface(isVillageScreen);
 }
 
-// Bind click event on village command tables to automatically add target
-function bindCommandSelection() {
-    jQuery('#commands_outgoings tr.command-row, #commands_incomings tr.command-row').off('click.snipe').on('click.snipe', function () {
-        jQuery(this).toggleClass('ra-chosen-command');
+function enableCommandSelector() {
+    // Add floating trigger button on village page
+    if (jQuery('#rudySnipeTrigger').length === 0) {
+        jQuery('body').append(`
+            <div id="rudySnipeTrigger" style="position: fixed; bottom: 20px; right: 20px; z-index: 99999;">
+                <button class="btn btn-confirm-yes" style="padding: 10px 15px; font-weight: bold; box-shadow: 0px 4px 10px rgba(0,0,0,0.5);">
+                    🎯 Open Snipe Calculator (<span id="rudySelectedCount">${selectedCommandsQueue.length}</span>)
+                </button>
+            </div>
+        `);
+        jQuery('#rudySnipeTrigger button').on('click', function () {
+            openMainInterface(true);
+        });
+    }
+
+    // Attach click listeners to incoming/outgoing rows
+    jQuery('#commands_outgoings tr.command-row, #commands_incomings tr.command-row').off('click.rudySnipe').on('click.rudySnipe', function () {
         const rawTime = jQuery(this).find('td:eq(1)').text().trim();
         const landingTime = getTimeFromString(rawTime);
         const destination = getDestinationVillageCoords();
 
-        if (landingTime && destination) {
-            addTargetRow(destination, landingTime);
-            UI.SuccessMessage('Command added to targets!');
+        if (!landingTime || !destination) return;
+
+        const existsIndex = selectedCommandsQueue.findIndex(t => t.destination === destination && t.landingTime === landingTime);
+
+        if (existsIndex > -1) {
+            selectedCommandsQueue.splice(existsIndex, 1);
+            jQuery(this).removeClass('rudy-selected-cmd');
+            UI.InfoMessage('Command removed from snipe targets.');
+        } else {
+            selectedCommandsQueue.push({ destination, landingTime });
+            jQuery(this).addClass('rudy-selected-cmd');
+            UI.SuccessMessage('Command added to snipe targets!');
         }
+
+        localStorage.setItem(`${LS_PREFIX}_targets`, JSON.stringify(selectedCommandsQueue));
+        jQuery('#rudySelectedCount').text(selectedCommandsQueue.length);
+        renderTargetsTable();
     });
 }
 
-function addTargetRow(coords = '', landingTime = '') {
-    if (!coords) coords = getDestinationVillageCoords();
-    if (!landingTime) landingTime = new Date().toLocaleString('en-GB').replace(',', '');
+async function openMainInterface(isVillageScreen) {
+    const groups = await fetchVillageGroups();
+    const groupsFilter = renderGroupsFilter(groups);
+    const unitsTable = buildUnitsChooserTable();
 
-    const rowHtml = `
-        <tr class="ra-target-row">
-            <td><input type="text" class="ra-target-coords" value="${coords}" placeholder="500|500"></td>
-            <td><input type="text" class="ra-target-time" value="${landingTime}" placeholder="dd/mm/yyyy HH:mm:ss"></td>
-            <td><a href="javascript:void(0);" class="btn btn-remove-row" onclick="jQuery(this).closest('tr').remove();">X</a></td>
-        </tr>
+    const content = `
+        <div id="rudySnipeModal" class="rudy-modal">
+            <div class="rudy-modal-content">
+                <div class="rudy-modal-header">
+                    <h2>🎯 ${scriptData.name} <small>v${scriptData.version} - by ${scriptData.author}</small></h2>
+                    <span class="rudy-close">&times;</span>
+                </div>
+                <div class="rudy-modal-body">
+                    <div class="rudy-tabs">
+                        <button class="rudy-tab-btn active" data-tab="tab-targets">1. Targets & Setup</button>
+                        <button class="rudy-tab-btn" data-tab="tab-import">2. Import / Export</button>
+                    </div>
+
+                    <!-- TAB 1: TARGETS & SETUP -->
+                    <div id="tab-targets" class="rudy-tab-content active">
+                        ${isVillageScreen ? `<div class="rudy-alert info">💡 You are on a village screen. Click on commands on the page to automatically add them below.</div>` : ''}
+                        
+                        <div class="rudy-grid-top">
+                            <div>
+                                <label><strong>Group Filter</strong></label>
+                                ${groupsFilter}
+                            </div>
+                            <div>
+                                <label><strong>Sigil (%)</strong></label>
+                                <input id="rudySigil" type="number" value="0" min="0" max="100">
+                            </div>
+                            <div>
+                                <label><strong>Min. Troop Amount</strong></label>
+                                <input id="rudyMinAmount" type="number" value="50">
+                            </div>
+                        </div>
+
+                        <div class="rudy-section">
+                            <h3>Targets List</h3>
+                            <table class="vis rudy-table" width="100%" id="rudyTargetsTable">
+                                <thead>
+                                    <tr>
+                                        <th>Target Coords</th>
+                                        <th>Landing Time (dd/mm/yyyy HH:mm:ss)</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                            <button id="rudyAddRowBtn" class="btn" style="margin-top:5px;">+ Add Target Manually</button>
+                        </div>
+
+                        <div class="rudy-section">
+                            <h3>Select Snipe Units</h3>
+                            ${unitsTable}
+                        </div>
+
+                        <div class="rudy-actions">
+                            <button id="rudyCalculateBtn" class="btn btn-confirm-yes" style="font-size:14px; padding: 6px 12px;">🚀 Calculate Snipe Options</button>
+                            <button id="rudyResetBtn" class="btn btn-cancel">Reset All</button>
+                        </div>
+
+                        <div id="rudyResultsArea" style="display:none; margin-top:15px;">
+                            <h3>Calculated Options (<span id="rudyResultCount">0</span>)</h3>
+                            <div id="rudyResultsTable"></div>
+                            <button id="rudyExportBBBtn" class="btn" style="margin-top:10px;">Copy BB-Code</button>
+                        </div>
+                    </div>
+
+                    <!-- TAB 2: IMPORT / EXPORT -->
+                    <div id="tab-import" class="rudy-tab-content">
+                        <div class="rudy-section">
+                            <h3>Share or Load Target Lists</h3>
+                            <p>Copy the list below to share with tribemates, or paste a list from a tribemate and click Import.</p>
+                            <textarea id="rudyShareBox" style="width:100%; height:160px; font-family:monospace;"></textarea>
+                            <div style="margin-top: 10px;">
+                                <button id="rudyImportActionBtn" class="btn btn-confirm-yes">Import List into Calculator</button>
+                                <button id="rudyExportActionBtn" class="btn">Generate Export String</button>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+        ${getCustomStyles()}
     `;
-    jQuery('#raTargetsTable tbody').append(rowHtml);
+
+    jQuery('#rudySnipeModal').remove();
+    jQuery('body').append(content);
+
+    renderTargetsTable();
+    bindModalEvents();
 }
 
-function getDestinationVillageCoords() {
-    let villageText = mobiledevice 
-        ? jQuery('.mobileKeyValue').eq(0).find('div').eq(0).text() 
-        : jQuery('#content_value table table td:eq(2)').text();
-    const match = villageText.match(/\d+\|\d+/);
-    return match ? match[0] : '';
+function bindModalEvents() {
+    const modal = jQuery('#rudySnipeModal');
+
+    modal.find('.rudy-close').on('click', () => modal.hide());
+    
+    // Tab switching
+    modal.find('.rudy-tab-btn').on('click', function () {
+        modal.find('.rudy-tab-btn').removeClass('active');
+        modal.find('.rudy-tab-content').removeClass('active');
+        jQuery(this).addClass('active');
+        jQuery('#' + jQuery(this).data('tab')).addClass('active');
+    });
+
+    jQuery('#rudyAddRowBtn').on('click', () => addTargetRowUI());
+    jQuery('#rudyCalculateBtn').on('click', calculateLaunchTimes);
+    jQuery('#rudyResetBtn').on('click', resetScriptData);
+    jQuery('#rudyGroupsFilter').on('change', (e) => {
+        localStorage.setItem(`${LS_PREFIX}_chosen_group`, e.target.value);
+        GROUP_ID = e.target.value;
+        startScript();
+    });
+
+    jQuery('#rudyExportActionBtn').on('click', () => {
+        const configData = {
+            targets: getTargetsFromUI(),
+            sigil: jQuery('#rudySigil').val(),
+            minAmount: jQuery('#rudyMinAmount').val()
+        };
+        jQuery('#rudyShareBox').val(JSON.stringify(configData));
+        UI.SuccessMessage('Export string generated!');
+    });
+
+    jQuery('#rudyImportActionBtn').on('click', () => {
+        try {
+            const parsed = JSON.parse(jQuery('#rudyShareBox').val().trim());
+            const list = Array.isArray(parsed) ? parsed : parsed.targets;
+            if (list && list.length > 0) {
+                selectedCommandsQueue = list;
+                localStorage.setItem(`${LS_PREFIX}_targets`, JSON.stringify(selectedCommandsQueue));
+                renderTargetsTable();
+                jQuery('.rudy-tab-btn[data-tab="tab-targets"]').click();
+                UI.SuccessMessage('Targets successfully imported!');
+            }
+        } catch (e) {
+            UI.ErrorMessage('Invalid import format.');
+        }
+    });
+
+    jQuery('#rudyExportBBBtn').on('click', exportBBCode);
+}
+
+function renderTargetsTable() {
+    const tbody = jQuery('#rudyTargetsTable tbody');
+    tbody.empty();
+
+    if (selectedCommandsQueue.length === 0) {
+        addTargetRowUI();
+    } else {
+        selectedCommandsQueue.forEach(t => addTargetRowUI(t.destination, t.landingTime));
+    }
+}
+
+function addTargetRowUI(coords = '', time = '') {
+    const row = `
+        <tr class="rudy-target-row">
+            <td><input type="text" class="rudy-target-coords" value="${coords}" placeholder="500|500"></td>
+            <td><input type="text" class="rudy-target-time" value="${time}" placeholder="dd/mm/yyyy HH:mm:ss"></td>
+            <td><button class="btn btn-cancel" onclick="jQuery(this).closest('tr').remove();">X</button></td>
+        </tr>
+    `;
+    jQuery('#rudyTargetsTable tbody').append(row);
 }
 
 function getTargetsFromUI() {
     const targets = [];
-    jQuery('.ra-target-row').each(function () {
-        const coords = jQuery(this).find('.ra-target-coords').val().trim();
-        const time = jQuery(this).find('.ra-target-time').val().trim();
+    jQuery('.rudy-target-row').each(function () {
+        const coords = jQuery(this).find('.rudy-target-coords').val().trim();
+        const time = jQuery(this).find('.rudy-target-time').val().trim();
         if (coords && time) {
             targets.push({ destination: coords, landingTime: time });
         }
@@ -192,45 +263,42 @@ function getTargetsFromUI() {
 
 function calculateLaunchTimes() {
     const targets = getTargetsFromUI();
-    const minAmount = parseInt(jQuery('#raMinAmount').val().trim());
+    const minAmount = parseInt(jQuery('#rudyMinAmount').val().trim());
     const chosenUnits = [];
 
-    jQuery('.ra-unit-selector:checked').each(function () {
+    jQuery('.rudy-unit-selector:checked').each(function () {
         chosenUnits.push(this.value);
     });
 
     if (!targets.length || !chosenUnits.length) {
-        UI.ErrorMessage('Please enter at least one target and select units.');
+        UI.ErrorMessage('Add at least one target and select units.');
         return;
     }
 
-    saveCurrentConfig(targets, chosenUnits);
-
     const serverTime = getServerTime().getTime();
-    const allRealSnipes = [];
+    const snipes = [];
 
     targets.forEach((target) => {
-        const landingTimeObj = getLandingTime(target.landingTime);
+        const landingMs = getLandingTime(target.landingTime);
 
         villages.forEach((village) => {
             const distance = calculateDistance(village.coords, target.destination);
 
             chosenUnits.forEach((unit) => {
-                const launchTime = getLaunchTime(unit, landingTimeObj, distance);
-                if (launchTime > serverTime && distance > 0) {
-                    const villageTroops = troopCounts.find((t) => t.villageId === village.id);
-                    if (villageTroops && villageTroops[unit] >= (unit === 'snob' ? 1 : minAmount)) {
-                        allRealSnipes.push({
+                const launchMs = getLaunchTime(unit, landingMs, distance);
+                if (launchMs > serverTime && distance > 0) {
+                    const troops = troopCounts.find((t) => t.villageId === village.id);
+                    if (troops && troops[unit] >= (unit === 'snob' ? 1 : minAmount)) {
+                        snipes.push({
                             id: village.id,
                             name: village.name,
                             coords: village.coords,
                             targetCoords: target.destination,
                             unit: unit,
                             distance: distance,
-                            launchTime: launchTime,
-                            formattedLaunchTime: formatDateTime(launchTime),
-                            landingTime: target.landingTime,
-                            unitAmount: villageTroops[unit],
+                            launchMs: launchMs,
+                            formattedLaunch: formatDateTime(launchMs),
+                            unitAmount: troops[unit]
                         });
                     }
                 }
@@ -238,120 +306,105 @@ function calculateLaunchTimes() {
         });
     });
 
-    allRealSnipes.sort((a, b) => a.launchTime - b.launchTime);
+    snipes.sort((a, b) => a.launchMs - b.launchMs);
 
-    if (allRealSnipes.length > 0) {
-        const tableHtml = buildCombinationsTable(allRealSnipes);
-        jQuery('#raPossibleCombinations').show();
-        jQuery('#possibleCombinationsCount').text(allRealSnipes.length);
-        jQuery('#possibleCombinationsTable').html(tableHtml);
-        jQuery('#exportBBCodeBtn').attr('data-snipe', JSON.stringify(allRealSnipes));
+    if (snipes.length > 0) {
+        jQuery('#rudyResultsArea').show();
+        jQuery('#rudyResultCount').text(snipes.length);
+        jQuery('#rudyResultsTable').html(buildResultsTable(snipes));
+        jQuery('#rudyExportBBBtn').attr('data-json', JSON.stringify(snipes));
         Timing.tickHandlers.timers.init();
     } else {
-        UI.ErrorMessage('No possible snipe options found!');
-        jQuery('#raPossibleCombinations').hide();
+        UI.ErrorMessage('No available snipe options found.');
+        jQuery('#rudyResultsArea').hide();
     }
 }
 
-function buildCombinationsTable(snipes) {
-    let table = `
-        <table class="ra-table vis" width="100%">
+function buildResultsTable(snipes) {
+    let html = `
+        <table class="vis rudy-table" width="100%">
             <thead>
                 <tr>
                     <th>#</th>
-                    <th>From</th>
+                    <th>From Village</th>
                     <th>Target</th>
                     <th>Unit</th>
                     <th>Distance</th>
                     <th>Launch Time</th>
-                    <th>Send in</th>
+                    <th>Remaining</th>
                     <th>Send</th>
                 </tr>
             </thead>
             <tbody>
     `;
 
-    const serverTime = getServerTime().getTime();
+    const serverMs = getServerTime().getTime();
 
-    snipes.forEach((snipe, index) => {
-        const [toX, toY] = snipe.targetCoords.split('|');
-        const timeTillLaunch = secondsToHms((snipe.launchTime - serverTime) / 1000);
-        const commandUrl = `/game.php?village=${snipe.id}&screen=place&x=${toX}&y=${toY}&${snipe.unit}=${snipe.unitAmount}`;
+    snipes.forEach((s, idx) => {
+        const [x, y] = s.targetCoords.split('|');
+        const remaining = secondsToHms((s.launchMs - serverMs) / 1000);
+        const url = `/game.php?village=${s.id}&screen=place&x=${x}&y=${y}&${s.unit}=${s.unitAmount}`;
 
-        table += `
+        html += `
             <tr>
-                <td>${index + 1}</td>
-                <td><a href="/game.php?screen=info_village&id=${snipe.id}" target="_blank">${snipe.name} (${snipe.coords})</a></td>
-                <td><strong>${snipe.targetCoords}</strong></td>
-                <td><img src="/graphic/unit/unit_${snipe.unit}.webp" /> ${snipe.unitAmount}</td>
-                <td>${parseFloat(snipe.distance).toFixed(2)}</td>
-                <td>${snipe.formattedLaunchTime}</td>
-                <td><span class="timer" data-endtime>${timeTillLaunch}</span></td>
-                <td><a href="${commandUrl}" target="_blank" class="btn">Send</a></td>
+                <td>${idx + 1}</td>
+                <td><a href="/game.php?screen=info_village&id=${s.id}" target="_blank">${s.name} (${s.coords})</a></td>
+                <td><strong>${s.targetCoords}</strong></td>
+                <td><img src="/graphic/unit/unit_${s.unit}.webp"/> ${s.unitAmount}</td>
+                <td>${parseFloat(s.distance).toFixed(2)}</td>
+                <td>${s.formattedLaunch}</td>
+                <td><span class="timer" data-endtime>${remaining}</span></td>
+                <td><a href="${url}" target="_blank" class="btn btn-confirm-yes">Send</a></td>
             </tr>
         `;
     });
 
-    table += '</tbody></table>';
-    return table;
+    return html + '</tbody></table>';
 }
 
-function exportConfig() {
-    const configData = {
-        targets: getTargetsFromUI(),
-        sigil: jQuery('#raSigil').val(),
-        minAmount: jQuery('#raMinAmount').val(),
-    };
-    const content = `<div class="ra-popup-content"><textarea readonly id="exportArea" style="width:100%;height:150px;">${JSON.stringify(configData)}</textarea></div>`;
-    Dialog.show('export_dialog', content);
-    jQuery('#exportArea').select();
-}
-
-function importConfig() {
-    const content = `
-        <div class="ra-popup-content">
-            <textarea id="importArea" style="width:100%;height:150px;" placeholder="Paste target JSON list here..."></textarea>
-            <br/><a href="javascript:void(0);" id="processImportBtn" class="btn" style="margin-top:5px;">Import List</a>
-        </div>
-    `;
-    Dialog.show('import_dialog', content);
-
-    jQuery('#processImportBtn').on('click', function () {
-        try {
-            const data = JSON.parse(jQuery('#importArea').val().trim());
-            const targetList = Array.isArray(data) ? data : data.targets;
-
-            if (targetList && Array.isArray(targetList)) {
-                jQuery('#raTargetsTable tbody').empty();
-                targetList.forEach((t) => addTargetRow(t.destination, t.landingTime));
-                if (data.sigil) jQuery('#raSigil').val(data.sigil);
-                if (data.minAmount) jQuery('#raMinAmount').val(data.minAmount);
-                UI.SuccessMessage('Targets imported successfully!');
-                Dialog.close();
-            } else {
-                UI.ErrorMessage('Invalid format!');
-            }
-        } catch (e) {
-            UI.ErrorMessage('Invalid Configuration JSON.');
-        }
+function exportBBCode() {
+    const raw = jQuery('#rudyExportBBBtn').attr('data-json');
+    if (!raw) return;
+    const snipes = JSON.parse(raw);
+    let bb = `[table][**]Target[||]From[||]Unit[||]Launch Time[||]Command[/**]\n`;
+    snipes.forEach((s) => {
+        const [x, y] = s.targetCoords.split('|');
+        const url = `${window.location.origin}/game.php?village=${s.id}&screen=place&x=${x}&y=${y}&${s.unit}=${s.unitAmount}`;
+        bb += `[*][b]${s.targetCoords}[/b][|]${s.coords}[|][unit]${s.unit}[/unit] ${s.unitAmount}[|]${s.formattedLaunch}[|][url=${url}]Send[/url]\n`;
     });
+    bb += `[/table]`;
+
+    jQuery('#rudyShareBox').val(bb);
+    jQuery('.rudy-tab-btn[data-tab="tab-import"]').click();
+    UI.SuccessMessage('BB-Code exported to Tab 2!');
 }
 
-function saveCurrentConfig(targets, chosenUnits) {
-    localStorage.setItem(`${LS_PREFIX}_targets`, JSON.stringify(targets));
-    localStorage.setItem(`${LS_PREFIX}_chosen_units`, JSON.stringify(chosenUnits));
+function getCustomStyles() {
+    return `
+        <style>
+            .rudy-modal { display: block; position: fixed; z-index: 999999; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); overflow: auto; }
+            .rudy-modal-content { background: #f4e4bc; border: 2px solid #603000; margin: 3% auto; padding: 15px; width: 80%; max-width: 900px; border-radius: 5px; box-shadow: 0 5px 15px rgba(0,0,0,0.5); font-family: Verdana, Arial; }
+            .rudy-modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #804000; padding-bottom: 5px; }
+            .rudy-modal-header h2 { margin: 0; color: #804000; }
+            .rudy-close { font-size: 24px; font-weight: bold; cursor: pointer; color: #804000; }
+            .rudy-tabs { display: flex; gap: 5px; margin: 15px 0 10px; border-bottom: 1px solid #804000; }
+            .rudy-tab-btn { background: #dfcca6; border: 1px solid #804000; padding: 8px 15px; cursor: pointer; font-weight: bold; border-radius: 4px 4px 0 0; }
+            .rudy-tab-btn.active { background: #c1a26b; border-bottom: 1px solid #c1a26b; }
+            .rudy-tab-content { display: none; }
+            .rudy-tab-content.active { display: block; }
+            .rudy-grid-top { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 15px; background: #e2d0a8; padding: 10px; border-radius: 4px; }
+            .rudy-section { margin-bottom: 15px; }
+            .rudy-table { border-collapse: collapse; margin-top: 5px; }
+            .rudy-table th { background: #c1a26b; padding: 6px; }
+            .rudy-table td { padding: 4px; text-align: center; border: 1px solid #d2c29d; }
+            .rudy-selected-cmd td { background-color: #ffe563 !important; }
+            .rudy-alert { padding: 8px; margin-bottom: 10px; border-radius: 4px; border: 1px solid #bce8f1; background: #d9edf7; color: #31708f; }
+            .rudy-actions { display: flex; gap: 10px; margin-top: 15px; }
+        </style>
+    `;
 }
 
-function loadSavedTargets() {
-    const savedTargets = JSON.parse(localStorage.getItem(`${LS_PREFIX}_targets`));
-    if (savedTargets && savedTargets.length > 0) {
-        savedTargets.forEach((t) => addTargetRow(t.destination, t.landingTime));
-    } else {
-        addTargetRow(getDestinationVillageCoords());
-    }
-}
-
-/* Helpers */
+/* API & Utility Helpers */
 function getTimeFromString(timeLand) {
     let serverDate = jQuery('#serverDate').text().split('/');
     let time = timeLand.match(/\d+:\d+:\d+:\d+/) ?? timeLand.match(/\d+:\d+:\d+/);
@@ -373,6 +426,14 @@ function getTimeFromString(timeLand) {
     return `${serverDate[0]}/${serverDate[1]}/${serverDate[2]} ${time}`;
 }
 
+function getDestinationVillageCoords() {
+    let villageText = typeof mobiledevice !== 'undefined' && mobiledevice 
+        ? jQuery('.mobileKeyValue').eq(0).find('div').eq(0).text() 
+        : jQuery('#content_value table table td:eq(2)').text();
+    const match = villageText.match(/\d+\|\d+/);
+    return match ? match[0] : '';
+}
+
 function calculateDistance(from, to) {
     const [x1, y1] = from.split('|');
     const [x2, y2] = to.split('|');
@@ -381,7 +442,7 @@ function calculateDistance(from, to) {
 
 function getLaunchTime(unit, landingTime, distance) {
     const msPerMin = 60000;
-    const sigilRatio = 1 + (+jQuery('#raSigil').val() / 100);
+    const sigilRatio = 1 + (+jQuery('#rudySigil').val() / 100);
     const unitSpeed = unitInfo.config[unit].speed;
     const unitTime = (distance * unitSpeed * msPerMin) / sigilRatio;
     return Math.round((landingTime - unitTime) / 1000) * 1000;
@@ -413,52 +474,31 @@ function secondsToHms(d) {
     return `${h}:${m}:${s}`;
 }
 
-function filterVillagesByChosenGroup(e) {
-    localStorage.setItem(`${LS_PREFIX}_chosen_group`, e.target.value);
-    initMultiSnipe(e.target.value);
-}
-
-function resetScriptHandler() {
+function resetScriptData() {
     Object.keys(localStorage).forEach((key) => {
         if (key.startsWith(`${LS_PREFIX}_`)) localStorage.removeItem(key);
     });
     window.location.reload();
 }
 
-function exportBBCode() {
-    const raw = jQuery('#exportBBCodeBtn').attr('data-snipe');
-    if (!raw) return UI.ErrorMessage('Nothing to export!');
-    const snipes = JSON.parse(raw);
-    let bb = `[table][**]Target[||]From[||]Unit[||]Launch Time[||]Command[/**]\n`;
-    snipes.forEach((s) => {
-        const [toX, toY] = s.targetCoords.split('|');
-        const url = `${window.location.origin}/game.php?village=${s.id}&screen=place&x=${toX}&y=${toY}&${s.unit}=${s.unitAmount}`;
-        bb += `[*][b]${s.targetCoords}[/b][|]${s.coords}[|][unit]${s.unit}[/unit] ${s.unitAmount}[|]${s.formattedLaunchTime}[|][url=${url}]Send[/url]\n`;
-    });
-    bb += `[/table]`;
-
-    Dialog.show('bbcode_export', `<div class="ra-popup-content"><textarea readonly style="width:100%;height:150px;">${bb}</textarea></div>`);
-}
-
-function buildUnitsChoserTable() {
+function buildUnitsChooserTable() {
     const storedUnits = JSON.parse(localStorage.getItem(`${LS_PREFIX}_chosen_units`)) || ['spear', 'sword', 'heavy', 'catapult'];
     let th = '', td = '';
     game_data.units.forEach((u) => {
         if (u !== 'spy' && u !== 'militia') {
             const checked = storedUnits.includes(u) ? 'checked' : '';
             th += `<th><img src="/graphic/unit/unit_${u}.webp"></th>`;
-            td += `<td><input type="checkbox" class="ra-unit-selector" value="${u}" ${checked}/></td>`;
+            td += `<td><input type="checkbox" class="rudy-unit-selector" value="${u}" ${checked}/></td>`;
         }
     });
-    return `<table class="ra-table vis" width="100%"><thead><tr>${th}</tr></thead><tbody><tr>${td}</tr></tbody></table>`;
+    return `<table class="vis rudy-table" width="100%"><thead><tr>${th}</tr></thead><tbody><tr>${td}</tr></tbody></table>`;
 }
 
 function renderGroupsFilter(groups) {
-    const currentGroup = localStorage.getItem(`${LS_PREFIX}_chosen_group`) ?? 0;
-    let html = `<select id="raGroupsFilter">`;
+    let html = `<select id="rudyGroupsFilter" style="width:100%;">`;
     for (const [_, g] of Object.entries(groups.result)) {
         if (g.name) {
-            const sel = parseInt(g.group_id) === parseInt(currentGroup) ? 'selected' : '';
+            const sel = parseInt(g.group_id) === parseInt(GROUP_ID) ? 'selected' : '';
             html += `<option value="${g.group_id}" ${sel}>${g.name}</option>`;
         }
     }
@@ -524,9 +564,7 @@ var xml2json = function ($xml) {
     return data;
 };
 
-function tt(str) { return str; }
-
 (function () {
     if (!game_data.features.Premium.active) return UI.ErrorMessage('Premium Account required!');
-    initMultiSnipe(GROUP_ID);
+    startScript();
 })();
