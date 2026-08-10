@@ -41,7 +41,7 @@ async function startScript() {
 
     if (isVillageScreen) {
         enableCommandSelector();
-        UI.SuccessMessage('Snipe mode actief: Klik op aanvallen om ze te selecteren.', 3000);
+        UI.SuccessMessage('Snipe mode active: Click commands on the page to select them.', 3000);
     } else {
         openMainInterface(false);
     }
@@ -56,7 +56,7 @@ function enableCommandSelector() {
     if (jQuery('#rudySnipeTrigger').length === 0) {
         jQuery('body').append(`
             <div id="rudySnipeTrigger" style="position: fixed; bottom: 20px; right: 20px; z-index: 999999; background: #f4e4bc; border: 2px solid #603000; padding: 10px; border-radius: 5px; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">
-                <span style="font-weight:bold; margin-right: 10px; color: #603000;">Geselecteerd: <span id="rudySelectedCount">0</span></span>
+                <span style="font-weight:bold; margin-right: 10px; color: #603000;">Selected: <span id="rudySelectedCount">0</span></span>
                 <button id="rudyOpenModalBtn" class="btn btn-confirm-yes" style="padding: 5px 10px; font-weight: bold;">
                     🎯 Open Snipe Calculator
                 </button>
@@ -81,11 +81,11 @@ function enableCommandSelector() {
         if (existsIndex > -1) {
             selectedCommandsQueue.splice(existsIndex, 1);
             jQuery(this).removeClass('rudy-selected-cmd');
-            UI.InfoMessage('Aanval verwijderd uit selectie.');
+            UI.InfoMessage('Target removed from selection.');
         } else {
             selectedCommandsQueue.push({ destination, landingTime });
             jQuery(this).addClass('rudy-selected-cmd');
-            UI.SuccessMessage('Aanval toegevoegd aan snipe targets!');
+            UI.SuccessMessage('Target added to snipe calculator!');
         }
 
         jQuery('#rudySelectedCount').text(selectedCommandsQueue.length);
@@ -101,80 +101,80 @@ async function openMainInterface(isVillageScreen) {
         <div id="rudySnipeModal" class="rudy-modal">
             <div class="rudy-modal-content">
                 <div class="rudy-modal-header">
-                    <h2>🎯 ${scriptData.name} <small>v${scriptData.version} - door ${scriptData.author}</small></h2>
+                    <h2>🎯 ${scriptData.name} <small>v${scriptData.version} - by ${scriptData.author}</small></h2>
                     <span class="rudy-close">&times;</span>
                 </div>
                 
                 <div id="rudyNextLaunchBanner" class="rudy-next-launch" style="display:none;">
-                    ⏱️ Volgende verzendtijd in: <span id="rudyNextTimer" class="rudy-countdown">00:00:00</span>
+                    ⏱️ Next Launch In: <span id="rudyNextTimer" class="rudy-countdown">00:00:00</span>
                 </div>
 
                 <div class="rudy-modal-body">
                     <div class="rudy-tabs">
-                        <button class="rudy-tab-btn active" data-tab="tab-targets">1. Targets & Instellingen</button>
+                        <button class="rudy-tab-btn active" data-tab="tab-targets">1. Targets & Setup</button>
                         <button class="rudy-tab-btn" data-tab="tab-import">2. Import / Export</button>
                     </div>
 
                     <!-- TAB 1: TARGETS & SETUP -->
                     <div id="tab-targets" class="rudy-tab-content active">
-                        ${isVillageScreen ? `<div class="rudy-alert info">💡 Klik op de pagina op inkomende/uitgaande bevelen om ze toe te voegen of te verwijderen.</div>` : ''}
+                        ${isVillageScreen ? `<div class="rudy-alert info">💡 Click incoming/outgoing commands on the village page to select/unselect them.</div>` : ''}
                         
                         <div class="rudy-grid-top">
                             <div>
-                                <label><strong>Groep Filter</strong></label>
+                                <label><strong>Group Filter</strong></label>
                                 ${groupsFilter}
                             </div>
                             <div>
-                                <label><strong>Kerk / Vlag (%)</strong></label>
+                                <label><strong>Sigil (%)</strong></label>
                                 <input id="rudySigil" type="number" value="0" min="0" max="100">
                             </div>
                             <div>
-                                <label><strong>Min. Aantal Troepen</strong></label>
+                                <label><strong>Min. Troop Amount</strong></label>
                                 <input id="rudyMinAmount" type="number" value="50">
                             </div>
                         </div>
 
                         <div class="rudy-section">
-                            <h3>Lijst met Doelen</h3>
+                            <h3>Targets List</h3>
                             <table class="vis rudy-table" width="100%" id="rudyTargetsTable">
                                 <thead>
                                     <tr>
-                                        <th>Doel Coördinaten</th>
-                                        <th>Aankomsttijd (dd/mm/yyyy HH:mm:ss)</th>
-                                        <th>Actie</th>
+                                        <th>Target Coords</th>
+                                        <th>Landing Time (dd/mm/yyyy HH:mm:ss)</th>
+                                        <th>Action</th>
                                     </tr>
                                 </thead>
                                 <tbody></tbody>
                             </table>
-                            <button id="rudyAddRowBtn" class="btn" style="margin-top:5px;">+ Handmatig Target Toevoegen</button>
+                            <button id="rudyAddRowBtn" class="btn" style="margin-top:5px;">+ Add Target Manually</button>
                         </div>
 
                         <div class="rudy-section">
-                            <h3>Selecteer Snipe Eenheden</h3>
+                            <h3>Select Snipe Units</h3>
                             ${unitsTable}
                         </div>
 
                         <div class="rudy-actions">
-                            <button id="rudyCalculateBtn" class="btn btn-confirm-yes" style="font-size:14px; padding: 6px 12px;">🚀 Bereken Verzendtijden</button>
-                            <button id="rudyResetBtn" class="btn btn-cancel">Reset Alles</button>
+                            <button id="rudyCalculateBtn" class="btn btn-confirm-yes" style="font-size:14px; padding: 6px 12px;">🚀 Calculate Launch Times</button>
+                            <button id="rudyResetBtn" class="btn btn-cancel">Reset All</button>
                         </div>
 
                         <div id="rudyResultsArea" style="display:none; margin-top:15px;">
-                            <h3>Berekende Snipe Opties (<span id="rudyResultCount">0</span>)</h3>
+                            <h3>Calculated Options (<span id="rudyResultCount">0</span>)</h3>
                             <div id="rudyResultsTable"></div>
-                            <button id="rudyExportBBBtn" class="btn" style="margin-top:10px;">Kopieer BB-Code</button>
+                            <button id="rudyExportBBBtn" class="btn" style="margin-top:10px;">Copy BB-Code</button>
                         </div>
                     </div>
 
                     <!-- TAB 2: IMPORT / EXPORT -->
                     <div id="tab-import" class="rudy-tab-content">
                         <div class="rudy-section">
-                            <h3>Lijsten Delen of Inladen</h3>
-                            <p>Exporteer je doelen om te delen met stamgenoten, of plak hier een lijst om te importeren.</p>
+                            <h3>Share or Load Target Lists</h3>
+                            <p>Export target list to share with tribemates, or paste an imported list below.</p>
                             <textarea id="rudyShareBox" style="width:100%; height:160px; font-family:monospace;"></textarea>
                             <div style="margin-top: 10px;">
-                                <button id="rudyImportActionBtn" class="btn btn-confirm-yes">Importeer Lijst in Rekenmodule</button>
-                                <button id="rudyExportActionBtn" class="btn">Genereer Export String</button>
+                                <button id="rudyImportActionBtn" class="btn btn-confirm-yes">Import List into Calculator</button>
+                                <button id="rudyExportActionBtn" class="btn">Generate Export String</button>
                             </div>
                         </div>
                     </div>
@@ -226,7 +226,7 @@ function bindModalEvents() {
             minAmount: jQuery('#rudyMinAmount').val()
         };
         jQuery('#rudyShareBox').val(JSON.stringify(configData));
-        UI.SuccessMessage('Export string gegenereerd!');
+        UI.SuccessMessage('Export string generated!');
     });
 
     jQuery('#rudyImportActionBtn').on('click', () => {
@@ -237,10 +237,10 @@ function bindModalEvents() {
                 selectedCommandsQueue = list;
                 renderTargetsTable();
                 jQuery('.rudy-tab-btn[data-tab="tab-targets"]').click();
-                UI.SuccessMessage('Doelen succesvol geïmporteerd!');
+                UI.SuccessMessage('Targets successfully imported!');
             }
         } catch (e) {
-            UI.ErrorMessage('Ongeldig import formaat.');
+            UI.ErrorMessage('Invalid import format.');
         }
     });
 
@@ -291,7 +291,7 @@ function calculateLaunchTimes() {
     });
 
     if (!targets.length || !chosenUnits.length) {
-        UI.ErrorMessage('Voeg minimaal één target toe en kies eenheden.');
+        UI.ErrorMessage('Please add at least one target and select units.');
         return;
     }
 
@@ -332,25 +332,24 @@ function calculateLaunchTimes() {
         jQuery('#rudyResultsArea').show();
         updateResultsDisplay();
         startMasterCountdown();
-        UI.SuccessMessage(`Er zijn ${liveSnipesList.length} snipe opties berekend!`);
+        UI.SuccessMessage(`${liveSnipesList.length} snipe options calculated!`);
     } else {
         jQuery('#rudyResultsArea').hide();
         jQuery('#rudyNextLaunchBanner').hide();
         stopTimerAndRestoreTitle();
-        UI.ErrorMessage('Geen geldige snipe opties gevonden voor de gekozen doelen.');
+        UI.ErrorMessage('No available snipe options found for selected targets.');
     }
 }
 
 function updateResultsDisplay() {
     const now = getServerTime().getTime();
-    // Filter out expired snipes
     liveSnipesList = liveSnipesList.filter(s => s.launchMs > now);
 
     if (liveSnipesList.length === 0) {
         jQuery('#rudyResultsArea').hide();
         jQuery('#rudyNextLaunchBanner').hide();
         stopTimerAndRestoreTitle();
-        UI.InfoMessage('Alle berekende snipe opties zijn verlopen.');
+        UI.InfoMessage('All calculated snipe options have expired.');
         return;
     }
 
@@ -367,7 +366,6 @@ function startMasterCountdown() {
     nextLaunchInterval = setInterval(() => {
         const now = getServerTime().getTime();
         
-        // Remove expired options live
         if (liveSnipesList.length > 0 && liveSnipesList[0].launchMs <= now) {
             updateResultsDisplay();
         }
@@ -377,7 +375,6 @@ function startMasterCountdown() {
             const diffSec = Math.max(0, Math.floor((nextLaunchMs - now) / 1000));
             const formattedTime = secondsToHms(diffSec);
 
-            // Update modal UI timer & Browser Tab Title Timer
             jQuery('#rudyNextTimer').text(formattedTime);
             document.title = `⏱️ [${formattedTime}] ${scriptData.name}`;
         } else {
@@ -398,13 +395,13 @@ function buildResultsTable(snipes) {
             <thead>
                 <tr>
                     <th>#</th>
-                    <th>Van Dorp</th>
+                    <th>From Village</th>
                     <th>Target</th>
-                    <th>Eenheid</th>
-                    <th>Afstand</th>
-                    <th>Verzendtijd</th>
-                    <th>Resterend</th>
-                    <th>Stuur</th>
+                    <th>Unit</th>
+                    <th>Distance</th>
+                    <th>Launch Time</th>
+                    <th>Remaining</th>
+                    <th>Send</th>
                 </tr>
             </thead>
             <tbody>
@@ -426,7 +423,7 @@ function buildResultsTable(snipes) {
                 <td>${parseFloat(s.distance).toFixed(2)}</td>
                 <td>${s.formattedLaunch}</td>
                 <td><span class="timer" data-endtime>${remaining}</span></td>
-                <td><a href="${url}" target="_blank" class="btn btn-confirm-yes">Verstuur</a></td>
+                <td><a href="${url}" target="_blank" class="btn btn-confirm-yes">Send</a></td>
             </tr>
         `;
     });
@@ -438,25 +435,26 @@ function exportBBCode() {
     const raw = jQuery('#rudyExportBBBtn').attr('data-json');
     if (!raw) return;
     const snipes = JSON.parse(raw);
-    let bb = `[table][**]Target[||]Van[||]Eenheid[||]Verzendtijd[||]Bevel[/**]\n`;
+    let bb = `[table][**]Target[||]From[||]Unit[||]Launch Time[||]Command[/**]\n`;
     snipes.forEach((s) => {
         const [x, y] = s.targetCoords.split('|');
         const url = `${window.location.origin}/game.php?village=${s.id}&screen=place&x=${x}&y=${y}&${s.unit}=${s.unitAmount}`;
-        bb += `[*][b]${s.targetCoords}[/b][|]${s.coords}[|][unit]${s.unit}[/unit] ${s.unitAmount}[|]${s.formattedLaunch}[|][url=${url}]Verstuur[/url]\n`;
+        bb += `[*][b]${s.targetCoords}[/b][|]${s.coords}[|][unit]${s.unit}[/unit] ${s.unitAmount}[|]${s.formattedLaunch}[|][url=${url}]Send[/url]\n`;
     });
     bb += `[/table]`;
 
     jQuery('#rudyShareBox').val(bb);
     jQuery('.rudy-tab-btn[data-tab="tab-import"]').click();
-    UI.SuccessMessage('BB-Code geëxporteerd naar Tab 2!');
+    UI.SuccessMessage('BB-Code exported to Tab 2!');
 }
 
 function getCustomStyles() {
     return `
         <style id="rudySnipeStyles">
-            /* Elevate game notifications above the modal */
-            #popups_wrapper, .popup_box, #faded, #UI_ErrorMessage, #UI_SuccessMessage, #UI_InfoMessage {
-                z-index: 9999999 !important;
+            /* Force game alerts and popups to display ABOVE the modal */
+            #popups_wrapper, .popup_box, #faded, #UI_ErrorMessage, #UI_SuccessMessage, #UI_InfoMessage, .autoComplete {
+                z-index: 99999999 !important;
+                position: fixed !important;
             }
             .rudy-modal { display: block; position: fixed; z-index: 999998; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); overflow: auto; }
             .rudy-modal-content { background: #f4e4bc; border: 2px solid #603000; margin: 3% auto; padding: 15px; width: 85%; max-width: 950px; border-radius: 5px; box-shadow: 0 5px 15px rgba(0,0,0,0.5); font-family: Verdana, Arial; }
@@ -475,7 +473,6 @@ function getCustomStyles() {
             .rudy-table { border-collapse: collapse; margin-top: 5px; }
             .rudy-table th { background: #c1a26b; padding: 6px; }
             .rudy-table td { padding: 4px; text-align: center; border: 1px solid #d2c29d; }
-            /* Command Highlighting Style */
             tr.rudy-selected-cmd td { background-color: #ffe563 !important; font-weight: bold; }
             .rudy-alert { padding: 8px; margin-bottom: 10px; border-radius: 4px; border: 1px solid #bce8f1; background: #d9edf7; color: #31708f; }
             .rudy-actions { display: flex; gap: 10px; margin-top: 15px; }
@@ -645,6 +642,6 @@ var xml2json = function ($xml) {
 };
 
 (function () {
-    if (!game_data.features.Premium.active) return UI.ErrorMessage('Premium Account vereist!');
+    if (!game_data.features.Premium.active) return UI.ErrorMessage('Premium Account required!');
     startScript();
 })();
