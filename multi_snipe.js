@@ -1,14 +1,14 @@
 /*
  * Script Name: Multi-Target Village Snipe
- * Version: 1.2.1
+ * Version: 1.2.2
  * Author: RudyNiet
- * Description: Universal Multi-Target Snipe Calculator with live tab title timer, high-visibility highlights & native browser alerts.
+ * Description: Universal Multi-Target Snipe Calculator with live tab title timer, high-visibility highlights & targeted alerts.
  */
 
 var scriptData = {
     prefix: 'rudyMultiSnipe',
     name: 'Multi-Target Snipe Calculator',
-    version: '1.2.1',
+    version: '1.2.2',
     author: 'RudyNiet'
 };
 
@@ -41,7 +41,7 @@ async function startScript() {
 
     if (isVillageScreen) {
         enableCommandSelector();
-        alert('Snipe mode active: Click commands on the page to select them.');
+        UI.SuccessMessage('Snipe mode active: Click commands on the page to select them.', 3000);
     } else {
         openMainInterface(false);
     }
@@ -79,11 +79,11 @@ function enableCommandSelector() {
         if (existsIndex > -1) {
             selectedCommandsQueue.splice(existsIndex, 1);
             jQuery(this).removeClass('rudy-selected-cmd');
-            alert('Target removed from selection.');
+            UI.InfoMessage('Target removed from selection.');
         } else {
             selectedCommandsQueue.push({ destination, landingTime });
             jQuery(this).addClass('rudy-selected-cmd');
-            alert('Target added to snipe calculator!');
+            UI.SuccessMessage('Target added to snipe calculator!');
         }
 
         jQuery('#rudySelectedCount').text(selectedCommandsQueue.length);
@@ -224,7 +224,7 @@ function bindModalEvents() {
             minAmount: jQuery('#rudyMinAmount').val()
         };
         jQuery('#rudyShareBox').val(JSON.stringify(configData));
-        alert('Export string generated!');
+        UI.SuccessMessage('Export string generated!');
     });
 
     jQuery('#rudyImportActionBtn').on('click', () => {
@@ -235,10 +235,10 @@ function bindModalEvents() {
                 selectedCommandsQueue = list;
                 renderTargetsTable();
                 jQuery('.rudy-tab-btn[data-tab="tab-targets"]').click();
-                alert('Targets successfully imported!');
+                UI.SuccessMessage('Targets successfully imported!');
             }
         } catch (e) {
-            alert('Invalid import format.');
+            UI.ErrorMessage('Invalid import format.');
         }
     });
 
@@ -330,11 +330,12 @@ function calculateLaunchTimes() {
         jQuery('#rudyResultsArea').show();
         updateResultsDisplay();
         startMasterCountdown();
-        alert(`${liveSnipesList.length} snipe options calculated!`);
+        UI.SuccessMessage(`${liveSnipesList.length} snipe options calculated!`);
     } else {
         jQuery('#rudyResultsArea').hide();
         jQuery('#rudyNextLaunchBanner').hide();
         stopTimerAndRestoreTitle();
+        // Native browser alert reserved specifically for when no snipes are found
         alert('No available snipe options found for selected targets.');
     }
 }
@@ -443,7 +444,7 @@ function exportBBCode() {
 
     jQuery('#rudyShareBox').val(bb);
     jQuery('.rudy-tab-btn[data-tab="tab-import"]').click();
-    alert('BB-Code exported to Tab 2!');
+    UI.SuccessMessage('BB-Code exported to Tab 2!');
 }
 
 function getCustomStyles() {
@@ -635,6 +636,6 @@ var xml2json = function ($xml) {
 };
 
 (function () {
-    if (!game_data.features.Premium.active) return alert('Premium Account required!');
+    if (!game_data.features.Premium.active) return UI.ErrorMessage('Premium Account required!');
     startScript();
 })();
