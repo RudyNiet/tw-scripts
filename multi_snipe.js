@@ -1,14 +1,14 @@
 /*
  * Script Name: Multi-Target Village Snipe
- * Version: v1.2.0
+ * Version: 1.2.1
  * Author: RudyNiet
- * Description: Universal Multi-Target Snipe Calculator with live tab title timer, high-visibility highlights & clean session runs.
+ * Description: Universal Multi-Target Snipe Calculator with live tab title timer, high-visibility highlights & native browser alerts.
  */
 
 var scriptData = {
     prefix: 'rudyMultiSnipe',
     name: 'Multi-Target Snipe Calculator',
-    version: 'v1.2.0',
+    version: '1.2.1',
     author: 'RudyNiet'
 };
 
@@ -41,14 +41,13 @@ async function startScript() {
 
     if (isVillageScreen) {
         enableCommandSelector();
-        UI.SuccessMessage('Snipe mode active: Click commands on the page to select them.', 3000);
+        alert('Snipe mode active: Click commands on the page to select them.');
     } else {
         openMainInterface(false);
     }
 }
 
 function enableCommandSelector() {
-    // Inject custom styling for command highlighting & high z-index popups
     if (jQuery('#rudySnipeStyles').length === 0) {
         jQuery('head').append(getCustomStyles());
     }
@@ -68,7 +67,6 @@ function enableCommandSelector() {
         });
     }
 
-    // Bind click listeners to incoming & outgoing command rows with clear toggle highlighting
     jQuery('#commands_outgoings tr.command-row, #commands_incomings tr.command-row').off('click.rudySnipe').on('click.rudySnipe', function () {
         const rawTime = jQuery(this).find('td:eq(1)').text().trim();
         const landingTime = getTimeFromString(rawTime);
@@ -81,11 +79,11 @@ function enableCommandSelector() {
         if (existsIndex > -1) {
             selectedCommandsQueue.splice(existsIndex, 1);
             jQuery(this).removeClass('rudy-selected-cmd');
-            UI.InfoMessage('Target removed from selection.');
+            alert('Target removed from selection.');
         } else {
             selectedCommandsQueue.push({ destination, landingTime });
             jQuery(this).addClass('rudy-selected-cmd');
-            UI.SuccessMessage('Target added to snipe calculator!');
+            alert('Target added to snipe calculator!');
         }
 
         jQuery('#rudySelectedCount').text(selectedCommandsQueue.length);
@@ -226,7 +224,7 @@ function bindModalEvents() {
             minAmount: jQuery('#rudyMinAmount').val()
         };
         jQuery('#rudyShareBox').val(JSON.stringify(configData));
-        UI.SuccessMessage('Export string generated!');
+        alert('Export string generated!');
     });
 
     jQuery('#rudyImportActionBtn').on('click', () => {
@@ -237,10 +235,10 @@ function bindModalEvents() {
                 selectedCommandsQueue = list;
                 renderTargetsTable();
                 jQuery('.rudy-tab-btn[data-tab="tab-targets"]').click();
-                UI.SuccessMessage('Targets successfully imported!');
+                alert('Targets successfully imported!');
             }
         } catch (e) {
-            UI.ErrorMessage('Invalid import format.');
+            alert('Invalid import format.');
         }
     });
 
@@ -291,7 +289,7 @@ function calculateLaunchTimes() {
     });
 
     if (!targets.length || !chosenUnits.length) {
-        UI.ErrorMessage('Please add at least one target and select units.');
+        alert('Please add at least one target and select units.');
         return;
     }
 
@@ -332,12 +330,12 @@ function calculateLaunchTimes() {
         jQuery('#rudyResultsArea').show();
         updateResultsDisplay();
         startMasterCountdown();
-        UI.SuccessMessage(`${liveSnipesList.length} snipe options calculated!`);
+        alert(`${liveSnipesList.length} snipe options calculated!`);
     } else {
         jQuery('#rudyResultsArea').hide();
         jQuery('#rudyNextLaunchBanner').hide();
         stopTimerAndRestoreTitle();
-        UI.ErrorMessage('No available snipe options found for selected targets.');
+        alert('No available snipe options found for selected targets.');
     }
 }
 
@@ -349,7 +347,7 @@ function updateResultsDisplay() {
         jQuery('#rudyResultsArea').hide();
         jQuery('#rudyNextLaunchBanner').hide();
         stopTimerAndRestoreTitle();
-        UI.InfoMessage('All calculated snipe options have expired.');
+        alert('All calculated snipe options have expired.');
         return;
     }
 
@@ -445,17 +443,12 @@ function exportBBCode() {
 
     jQuery('#rudyShareBox').val(bb);
     jQuery('.rudy-tab-btn[data-tab="tab-import"]').click();
-    UI.SuccessMessage('BB-Code exported to Tab 2!');
+    alert('BB-Code exported to Tab 2!');
 }
 
 function getCustomStyles() {
     return `
         <style id="rudySnipeStyles">
-            /* Force game alerts and popups to display ABOVE the modal */
-            #popups_wrapper, .popup_box, #faded, #UI_ErrorMessage, #UI_SuccessMessage, #UI_InfoMessage, .autoComplete {
-                z-index: 99999999 !important;
-                position: fixed !important;
-            }
             .rudy-modal { display: block; position: fixed; z-index: 999998; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); overflow: auto; }
             .rudy-modal-content { background: #f4e4bc; border: 2px solid #603000; margin: 3% auto; padding: 15px; width: 85%; max-width: 950px; border-radius: 5px; box-shadow: 0 5px 15px rgba(0,0,0,0.5); font-family: Verdana, Arial; }
             .rudy-modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #804000; padding-bottom: 5px; }
@@ -642,6 +635,6 @@ var xml2json = function ($xml) {
 };
 
 (function () {
-    if (!game_data.features.Premium.active) return UI.ErrorMessage('Premium Account required!');
+    if (!game_data.features.Premium.active) return alert('Premium Account required!');
     startScript();
 })();
