@@ -1,14 +1,14 @@
 /*
  * Script Name: Multi-Target Village Snipe
- * Version: 1.2.2
+ * Version: 1.3.0
  * Author: RudyNiet
- * Description: Universal Multi-Target Snipe Calculator with live tab title timer, high-visibility highlights & targeted alerts.
+ * Description: Universal Multi-Target Snipe Calculator with ISO raw string import/export, persistent settings, and live tab timers.
  */
 
 var scriptData = {
     prefix: 'rudyMultiSnipe',
     name: 'Multi-Target Snipe Calculator',
-    version: '1.2.2',
+    version: '1.3.0',
     author: 'RudyNiet'
 };
 
@@ -69,19 +69,19 @@ function enableCommandSelector() {
 
     jQuery('#commands_outgoings tr.command-row, #commands_incomings tr.command-row').off('click.rudySnipe').on('click.rudySnipe', function () {
         const rawTime = jQuery(this).find('td:eq(1)').text().trim();
-        const landingTime = getTimeFromString(rawTime);
+        const landingTimeIso = getTimeAsIsoString(rawTime);
         const destination = getDestinationVillageCoords();
 
-        if (!landingTime || !destination) return;
+        if (!landingTimeIso || !destination) return;
 
-        const existsIndex = selectedCommandsQueue.findIndex(t => t.destination === destination && t.landingTime === landingTime);
+        const existsIndex = selectedCommandsQueue.findIndex(t => t.destination === destination && t.landingTime === landingTimeIso);
 
         if (existsIndex > -1) {
             selectedCommandsQueue.splice(existsIndex, 1);
             jQuery(this).removeClass('rudy-selected-cmd');
             UI.InfoMessage('Target removed from selection.');
         } else {
-            selectedCommandsQueue.push({ destination, landingTime });
+            selectedCommandsQueue.push({ destination, landingTime: landingTimeIso });
             jQuery(this).addClass('rudy-selected-cmd');
             UI.SuccessMessage('Target added to snipe calculator!');
         }
@@ -94,6 +94,10 @@ async function openMainInterface(isVillageScreen) {
     const groups = await fetchVillageGroups();
     const groupsFilter = renderGroupsFilter(groups);
     const unitsTable = buildUnitsChooserTable();
+
+    // Persistent Settings Retrieval
+    const savedSigil = localStorage.getItem(`${LS_PREFIX}_sigil`) ?? '0';
+    const savedMinAmount = localStorage.getItem(`${LS_PREFIX}_min_amount`) ?? '50';
 
     const content = `
         <div id="rudySnipeModal" class="rudy-modal">
@@ -124,11 +128,11 @@ async function openMainInterface(isVillageScreen) {
                             </div>
                             <div>
                                 <label><strong>Sigil (%)</strong></label>
-                                <input id="rudySigil" type="number" value="0" min="0" max="100">
+                                <input id="rudySigil" type="number" value="${savedSigil}" min="0" max="100">
                             </div>
                             <div>
                                 <label><strong>Min. Troop Amount</strong></label>
-                                <input id="rudyMinAmount" type="number" value="50">
+                                <input id="rudyMinAmount" type="number" value="${savedMinAmount}">
                             </div>
                         </div>
 
@@ -138,7 +142,7 @@ async function openMainInterface(isVillageScreen) {
                                 <thead>
                                     <tr>
                                         <th>Target Coords</th>
-                                        <th>Landing Time (dd/mm/yyyy HH:mm:ss)</th>
+                                        <th>Landing Time (ISO or dd/mm/yyyy HH:mm:ss)</th>
                                         <th>Action</th>
                                     </tr>
                                 </thead>
@@ -167,12 +171,12 @@ async function openMainInterface(isVillageScreen) {
                     <!-- TAB 2: IMPORT / EXPORT -->
                     <div id="tab-import" class="rudy-tab-content">
                         <div class="rudy-section">
-                            <h3>Share or Load Target Lists</h3>
-                            <p>Export target list to share with tribemates, or paste an imported list below.</p>
-                            <textarea id="rudyShareBox" style="width:100%; height:160px; font-family:monospace;"></textarea>
+                            <h3>Raw String Targets (Import / Export)</h3>
+                            <p>Paste lines formatted like: <code>555|463,2026-07-18T21:25:06.617,1171121506,attack_small.webp</code></p>
+                            <textarea id="rudyShareBox" style="width:100%; height:180px; font-family:monospace; white-space: pre;"></textarea>
                             <div style="margin-top: 10px;">
                                 <button id="rudyImportActionBtn" class="btn btn-confirm-yes">Import List into Calculator</button>
-                                <button id="rudyExportActionBtn" class="btn">Generate Export String</button>
+                                <button id="rudyExportActionBtn" class="btn">Generate Raw String Export</button>
                             </div>
                         </div>
                     </div>
@@ -208,6 +212,10 @@ function bindModalEvents() {
         jQuery('#' + jQuery(this).data('tab')).addClass('active');
     });
 
+    // Save inputs locally when updated
+    jQuery('#rudySigil').on('input change', (e) => localStorage.setItem(`${LS_PREFIX}_sigil`, e.target.value));
+    jQuery('#rudyMinAmount').on('input change', (e) => localStorage.setItem(`${LS_PREFIX}_min_amount`, e.target.value));
+
     jQuery('#rudyAddRowBtn').on('click', () => addTargetRowUI());
     jQuery('#rudyCalculateBtn').on('click', calculateLaunchTimes);
     jQuery('#rudyResetBtn').on('click', resetScriptData);
@@ -217,28 +225,60 @@ function bindModalEvents() {
         startScript();
     });
 
+    // Generate Raw CSV Export String
     jQuery('#rudyExportActionBtn').on('click', () => {
-        const configData = {
-            targets: getTargetsFromUI(),
-            sigil: jQuery('#rudySigil').val(),
-            minAmount: jQuery('#rudyMinAmount').val()
-        };
-        jQuery('#rudyShareBox').val(JSON.stringify(configData));
-        UI.SuccessMessage('Export string generated!');
+        const targets = getTargetsFromUI();
+        if (!targets.length) {
+            UI.ErrorMessage('No targets available to export.');
+            return;
+        }
+
+        const lines = targets.map(t => {
+            const timeFormatted = parseToMs(t.landingTime) ? new Date(parseToMs(t.landingTime)).toISOString() : t.landingTime;
+            return `${t.destination},${timeFormatted},,`;
+        });
+
+        jQuery('#rudyShareBox').val(lines.join('\n'));
+        UI.SuccessMessage('Raw target string generated!');
     });
 
+    // Import Raw CSV or Legacy JSON Strings
     jQuery('#rudyImportActionBtn').on('click', () => {
+        const rawInput = jQuery('#rudyShareBox').val().trim();
+        if (!rawInput) return;
+
+        let parsedTargets = [];
+
         try {
-            const parsed = JSON.parse(jQuery('#rudyShareBox').val().trim());
-            const list = Array.isArray(parsed) ? parsed : parsed.targets;
-            if (list && list.length > 0) {
-                selectedCommandsQueue = list;
+            // Attempt JSON parse first (backward compatibility)
+            if (rawInput.startsWith('{') || rawInput.startsWith('[')) {
+                const json = JSON.parse(rawInput);
+                parsedTargets = Array.isArray(json) ? json : json.targets;
+            } else {
+                // Parse CSV/Raw lines (555|463,2026-07-18T21:25:06.617,1171121506,attack_small.webp)
+                const lines = rawInput.split('\n');
+                lines.forEach(line => {
+                    const parts = line.split(',');
+                    if (parts.length >= 2) {
+                        const destination = parts[0].trim();
+                        const landingTime = parts[1].trim();
+                        if (destination && landingTime) {
+                            parsedTargets.push({ destination, landingTime });
+                        }
+                    }
+                });
+            }
+
+            if (parsedTargets.length > 0) {
+                selectedCommandsQueue = parsedTargets;
                 renderTargetsTable();
                 jQuery('.rudy-tab-btn[data-tab="tab-targets"]').click();
-                UI.SuccessMessage('Targets successfully imported!');
+                UI.SuccessMessage(`${parsedTargets.length} targets successfully imported!`);
+            } else {
+                UI.ErrorMessage('No valid targets found in text.');
             }
         } catch (e) {
-            UI.ErrorMessage('Invalid import format.');
+            UI.ErrorMessage('Failed to parse import string.');
         }
     });
 
@@ -260,7 +300,7 @@ function addTargetRowUI(coords = '', time = '') {
     const row = `
         <tr class="rudy-target-row">
             <td><input type="text" class="rudy-target-coords" value="${coords}" placeholder="500|500"></td>
-            <td><input type="text" class="rudy-target-time" value="${time}" placeholder="dd/mm/yyyy HH:mm:ss"></td>
+            <td><input type="text" class="rudy-target-time" value="${time}" placeholder="2026-07-18T21:25:06.617"></td>
             <td><button class="btn btn-cancel" onclick="jQuery(this).closest('tr').remove();">X</button></td>
         </tr>
     `;
@@ -297,7 +337,9 @@ function calculateLaunchTimes() {
     liveSnipesList = [];
 
     targets.forEach((target) => {
-        const landingMs = getLandingTime(target.landingTime);
+        const landingMs = parseToMs(target.landingTime);
+
+        if (!landingMs) return;
 
         villages.forEach((village) => {
             const distance = calculateDistance(village.coords, target.destination);
@@ -335,7 +377,6 @@ function calculateLaunchTimes() {
         jQuery('#rudyResultsArea').hide();
         jQuery('#rudyNextLaunchBanner').hide();
         stopTimerAndRestoreTitle();
-        // Native browser alert reserved specifically for when no snipes are found
         alert('No available snipe options found for selected targets.');
     }
 }
@@ -474,26 +515,55 @@ function getCustomStyles() {
     `;
 }
 
-/* API & Utility Helpers */
-function getTimeFromString(timeLand) {
+/* API & Universal Time Parsing Helpers */
+function parseToMs(timeString) {
+    if (!timeString) return null;
+    
+    // Check if ISO string (2026-07-18T21:25:06.617 or ISO without milliseconds)
+    if (timeString.includes('T')) {
+        return new Date(timeString).getTime();
+    }
+
+    // Process legacy DD/MM/YYYY HH:mm:ss format
+    const parts = timeString.split(' ');
+    if (parts.length === 2) {
+        const [day, month, year] = parts[0].split('/');
+        const timeParts = parts[1].split(':');
+        const h = timeParts[0], m = timeParts[1], s = timeParts[2], ms = timeParts[3] || '000';
+        return new Date(`${year}-${month}-${day}T${h}:${m}:${s}.${ms}`).getTime();
+    }
+
+    return Date.parse(timeString) || null;
+}
+
+function getTimeAsIsoString(timeLand) {
     let serverDate = jQuery('#serverDate').text().split('/');
     let time = timeLand.match(/\d+:\d+:\d+:\d+/) ?? timeLand.match(/\d+:\d+:\d+/);
     time = time ? time[0] : '';
+    let [h, m, s, ms] = time.split(':');
+    ms = ms ? ms.padStart(3, '0') : '000';
+    let formattedTime = `${h}:${m}:${s}.${ms}`;
+
+    let year = serverDate[2], month = serverDate[1], day = serverDate[0];
 
     if (timeLand.includes('today') || timeLand.includes('heute')) {
-        return `${serverDate[0]}/${serverDate[1]}/${serverDate[2]} ${time}`;
+        // Today
     } else if (timeLand.includes('tomorrow') || timeLand.includes('morgen')) {
         let tomorrow = new Date(serverDate[1] + '/' + serverDate[0] + '/' + serverDate[2]);
         tomorrow.setDate(tomorrow.getDate() + 1);
-        return `${('0' + tomorrow.getDate()).slice(-2)}/${('0' + (tomorrow.getMonth() + 1)).slice(-2)}/${tomorrow.getFullYear()} ${time}`;
+        day = ('0' + tomorrow.getDate()).slice(-2);
+        month = ('0' + (tomorrow.getMonth() + 1)).slice(-2);
+        year = tomorrow.getFullYear();
     } else {
         let on = timeLand.match(/\d+.\d+/);
         if (on) {
             let dateParts = on[0].split('.');
-            return `${dateParts[0]}/${dateParts[1]}/${serverDate[2]} ${time}`;
+            day = dateParts[0].padStart(2, '0');
+            month = dateParts[1].padStart(2, '0');
         }
     }
-    return `${serverDate[0]}/${serverDate[1]}/${serverDate[2]} ${time}`;
+
+    return `${year}-${month}-${day}T${formattedTime}`;
 }
 
 function getDestinationVillageCoords() {
@@ -510,19 +580,12 @@ function calculateDistance(from, to) {
     return Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2));
 }
 
-function getLaunchTime(unit, landingTime, distance) {
+function getLaunchTime(unit, landingTimeMs, distance) {
     const msPerMin = 60000;
     const sigilRatio = 1 + (+jQuery('#rudySigil').val() / 100);
     const unitSpeed = unitInfo.config[unit].speed;
     const unitTime = (distance * unitSpeed * msPerMin) / sigilRatio;
-    return Math.round((landingTime - unitTime) / 1000) * 1000;
-}
-
-function getLandingTime(landingTime) {
-    const [landingDay, landingHour] = landingTime.split(' ');
-    const [day, month, year] = landingDay.split('/');
-    const [hours, minutes, seconds] = landingHour.split(':');
-    return new Date(`${year}-${month}-${day}T${hours}:${minutes}:${seconds}`).getTime();
+    return Math.round((landingTimeMs - unitTime) / 1000) * 1000;
 }
 
 function getServerTime() {
