@@ -1,14 +1,14 @@
 /*
  * Script Name: Multi-Target Village Snipe
- * Version: 1.3.0
+ * Version: 1.3.1
  * Author: RudyNiet
- * Description: Universal Multi-Target Snipe Calculator with ISO raw string import/export, persistent settings, and live tab timers.
+ * Description: Universal Multi-Target Snipe Calculator with full command ID & icon metadata tracking in raw string exports.
  */
 
 var scriptData = {
     prefix: 'rudyMultiSnipe',
     name: 'Multi-Target Snipe Calculator',
-    version: '1.3.0',
+    version: '1.3.1',
     author: 'RudyNiet'
 };
 
@@ -20,7 +20,6 @@ var LAST_UPDATED_TIME = localStorage.getItem(`${LS_PREFIX}_last_updated`) ?? 0;
 var originalDocumentTitle = document.title;
 var unitInfo, villages = [], troopCounts = [];
 
-// ALWAYS START FRESH: Clear previously stored targets on new run
 localStorage.removeItem(`${LS_PREFIX}_targets`);
 var selectedCommandsQueue = [];
 
@@ -72,6 +71,15 @@ function enableCommandSelector() {
         const landingTimeIso = getTimeAsIsoString(rawTime);
         const destination = getDestinationVillageCoords();
 
+        // Extract Command ID from the link
+        const cmdLink = jQuery(this).find('a[href*="id="]').attr('href') || '';
+        const cmdIdMatch = cmdLink.match(/id=(\d+)/);
+        const commandId = cmdIdMatch ? cmdIdMatch[1] : '';
+
+        // Extract Icon Image Name
+        const imgIcon = jQuery(this).find('img[src*="command/"], img[src*="graphic/"]').attr('src') || '';
+        const iconName = imgIcon ? imgIcon.split('/').pop() : 'attack.webp';
+
         if (!landingTimeIso || !destination) return;
 
         const existsIndex = selectedCommandsQueue.findIndex(t => t.destination === destination && t.landingTime === landingTimeIso);
@@ -81,7 +89,12 @@ function enableCommandSelector() {
             jQuery(this).removeClass('rudy-selected-cmd');
             UI.InfoMessage('Target removed from selection.');
         } else {
-            selectedCommandsQueue.push({ destination, landingTime: landingTimeIso });
+            selectedCommandsQueue.push({ 
+                destination, 
+                landingTime: landingTimeIso,
+                commandId: commandId,
+                iconName: iconName
+            });
             jQuery(this).addClass('rudy-selected-cmd');
             UI.SuccessMessage('Target added to snipe calculator!');
         }
@@ -95,7 +108,6 @@ async function openMainInterface(isVillageScreen) {
     const groupsFilter = renderGroupsFilter(groups);
     const unitsTable = buildUnitsChooserTable();
 
-    // Persistent Settings Retrieval
     const savedSigil = localStorage.getItem(`${LS_PREFIX}_sigil`) ?? '0';
     const savedMinAmount = localStorage.getItem(`${LS_PREFIX}_min_amount`) ?? '50';
 
@@ -172,7 +184,7 @@ async function openMainInterface(isVillageScreen) {
                     <div id="tab-import" class="rudy-tab-content">
                         <div class="rudy-section">
                             <h3>Raw String Targets (Import / Export)</h3>
-                            <p>Paste lines formatted like: <code>555|463,2026-07-18T21:25:06.617,1171121506,attack_small.webp</code></p>
+                            <p>Format: <code>555|463,2026-07-18T21:25:06.617,1171121506,attack_small.webp</code></p>
                             <textarea id="rudyShareBox" style="width:100%; height:180px; font-family:monospace; white-space: pre;"></textarea>
                             <div style="margin-top: 10px;">
                                 <button id="rudyImportActionBtn" class="btn btn-confirm-yes">Import List into Calculator</button>
@@ -212,7 +224,6 @@ function bindModalEvents() {
         jQuery('#' + jQuery(this).data('tab')).addClass('active');
     });
 
-    // Save inputs locally when updated
     jQuery('#rudySigil').on('input change', (e) => localStorage.setItem(`${LS_PREFIX}_sigil`, e.target.value));
     jQuery('#rudyMinAmount').on('input change', (e) => localStorage.setItem(`${LS_PREFIX}_min_amount`, e.target.value));
 
@@ -225,7 +236,7 @@ function bindModalEvents() {
         startScript();
     });
 
-    // Generate Raw CSV Export String
+    // Generate Raw CSV Export String (With Metadata)
     jQuery('#rudyExportActionBtn').on('click', () => {
         const targets = getTargetsFromUI();
         if (!targets.length) {
@@ -235,14 +246,16 @@ function bindModalEvents() {
 
         const lines = targets.map(t => {
             const timeFormatted = parseToMs(t.landingTime) ? new Date(parseToMs(t.landingTime)).toISOString() : t.landingTime;
-            return `${t.destination},${timeFormatted},,`;
+            const cmdId = t.commandId || '';
+            const icon = t.iconName || 'attack.webp';
+            return `${t.destination},${timeFormatted},${cmdId},${icon}`;
         });
 
         jQuery('#rudyShareBox').val(lines.join('\n'));
         UI.SuccessMessage('Raw target string generated!');
     });
 
-    // Import Raw CSV or Legacy JSON Strings
+    // Flexible Importer
     jQuery('#rudyImportActionBtn').on('click', () => {
         const rawInput = jQuery('#rudyShareBox').val().trim();
         if (!rawInput) return;
@@ -250,20 +263,22 @@ function bindModalEvents() {
         let parsedTargets = [];
 
         try {
-            // Attempt JSON parse first (backward compatibility)
             if (rawInput.startsWith('{') || rawInput.startsWith('[')) {
                 const json = JSON.parse(rawInput);
                 parsedTargets = Array.isArray(json) ? json : json.targets;
             } else {
-                // Parse CSV/Raw lines (555|463,2026-07-18T21:25:06.617,1171121506,attack_small.webp)
                 const lines = rawInput.split('\n');
                 lines.forEach(line => {
-                    const parts = line.split(',');
+                    if (!line.trim()) return;
+                    const parts = line.split(',').map(p => p.trim());
                     if (parts.length >= 2) {
-                        const destination = parts[0].trim();
-                        const landingTime = parts[1].trim();
+                        const destination = parts[0];
+                        const landingTime = parts[1];
+                        const commandId = parts[2] || '';
+                        const iconName = parts[3] || 'attack.webp';
+
                         if (destination && landingTime) {
-                            parsedTargets.push({ destination, landingTime });
+                            parsedTargets.push({ destination, landingTime, commandId, iconName });
                         }
                     }
                 });
@@ -292,13 +307,13 @@ function renderTargetsTable() {
     if (selectedCommandsQueue.length === 0) {
         addTargetRowUI();
     } else {
-        selectedCommandsQueue.forEach(t => addTargetRowUI(t.destination, t.landingTime));
+        selectedCommandsQueue.forEach(t => addTargetRowUI(t.destination, t.landingTime, t.commandId, t.iconName));
     }
 }
 
-function addTargetRowUI(coords = '', time = '') {
+function addTargetRowUI(coords = '', time = '', cmdId = '', icon = '') {
     const row = `
-        <tr class="rudy-target-row">
+        <tr class="rudy-target-row" data-cmd-id="${cmdId}" data-icon="${icon}">
             <td><input type="text" class="rudy-target-coords" value="${coords}" placeholder="500|500"></td>
             <td><input type="text" class="rudy-target-time" value="${time}" placeholder="2026-07-18T21:25:06.617"></td>
             <td><button class="btn btn-cancel" onclick="jQuery(this).closest('tr').remove();">X</button></td>
@@ -312,8 +327,16 @@ function getTargetsFromUI() {
     jQuery('.rudy-target-row').each(function () {
         const coords = jQuery(this).find('.rudy-target-coords').val().trim();
         const time = jQuery(this).find('.rudy-target-time').val().trim();
+        const cmdId = jQuery(this).attr('data-cmd-id') || '';
+        const icon = jQuery(this).attr('data-icon') || 'attack.webp';
+        
         if (coords && time) {
-            targets.push({ destination: coords, landingTime: time });
+            targets.push({ 
+                destination: coords, 
+                landingTime: time,
+                commandId: cmdId,
+                iconName: icon 
+            });
         }
     });
     return targets;
@@ -519,12 +542,10 @@ function getCustomStyles() {
 function parseToMs(timeString) {
     if (!timeString) return null;
     
-    // Check if ISO string (2026-07-18T21:25:06.617 or ISO without milliseconds)
     if (timeString.includes('T')) {
         return new Date(timeString).getTime();
     }
 
-    // Process legacy DD/MM/YYYY HH:mm:ss format
     const parts = timeString.split(' ');
     if (parts.length === 2) {
         const [day, month, year] = parts[0].split('/');
